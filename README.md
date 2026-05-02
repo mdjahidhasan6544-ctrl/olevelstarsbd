@@ -24,12 +24,12 @@ Full-stack learning platform with a React/Vite frontend, Express API, and MongoD
 The repository is prepared for:
 
 - Frontend: GitHub Pages through `.github/workflows/deploy-pages.yml`
-- Backend: Render web service through `render.yaml`
+- Backend: any Node.js host that can run the Express app from `backend`
 - Database: MongoDB Atlas through the backend `MONGO_URI` environment variable
 
 ### Backend Environment Variables
 
-Set these in Render, not in GitHub-tracked files:
+Set these in your backend host, not in GitHub-tracked files:
 
 ```env
 MONGO_URI=mongodb+srv://olevelstars_db_user:<password>@olevelstars.7ew5xw0.mongodb.net/olevelstars?retryWrites=true&w=majority&appName=olevelstars
@@ -44,10 +44,10 @@ ADMIN_PASSWORD=<strong-admin-password>
 
 ### Frontend GitHub Variable
 
-After the Render backend is live, add this repository variable or secret in GitHub:
+After the backend is live, add this repository variable or secret in GitHub:
 
 ```env
-VITE_API_URL=https://<render-backend-url>
+VITE_API_URL=https://<backend-url>
 ```
 
 Then enable GitHub Pages with source set to GitHub Actions and run the deploy workflow.
