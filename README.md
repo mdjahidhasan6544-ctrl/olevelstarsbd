@@ -19,6 +19,18 @@ Full-stack learning platform with a React/Vite frontend, Express API, and MongoD
 5. Start the backend with `npm run dev` from `backend`.
 6. Start the frontend with `npm run dev` from `frontend`.
 
+
+## JSON Files Kept for GitHub Deployment
+
+Only the following JSON files are required and intentionally kept:
+
+- `backend/package.json`
+- `backend/package-lock.json`
+- `frontend/package.json`
+- `frontend/package-lock.json`
+
+No additional deployment JSON configuration files are needed for GitHub Actions + MongoDB Atlas in this repository.
+
 ## Production Deployment
 
 The repository is prepared for:
