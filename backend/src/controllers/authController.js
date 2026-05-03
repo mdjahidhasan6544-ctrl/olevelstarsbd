@@ -59,6 +59,56 @@ function getJwtSecret() {
   return process.env.JWT_SECRET?.trim();
 }
 
+function getConfiguredAdminAccount() {
+  const email = process.env.ADMIN_EMAIL?.toLowerCase().trim();
+  const password = process.env.ADMIN_PASSWORD;
+
+  if (!email || !password) {
+    return null;
+  }
+
+  return {
+    email,
+    password,
+    name: process.env.ADMIN_NAME?.trim() || "Scholastica Admin"
+  };
+}
+
+async function syncConfiguredAdminUser(user, adminAccount, { updatePassword = false } = {}) {
+  let updated = false;
+
+  if (user.name !== adminAccount.name) {
+    user.name = adminAccount.name;
+    updated = true;
+  }
+
+  if (updatePassword) {
+    user.passwordHash = await bcrypt.hash(adminAccount.password, 12);
+    updated = true;
+  }
+
+  if (user.role !== "admin") {
+    user.role = "admin";
+    updated = true;
+  }
+
+  if (!user.isVerifiedStudent) {
+    user.isVerifiedStudent = true;
+    updated = true;
+  }
+
+  if (user.status !== "active") {
+    user.status = "active";
+    updated = true;
+  }
+
+  if (updated) {
+    await user.save();
+  }
+
+  return user;
+}
+
 function signToken(user) {
   const jwtSecret = getJwtSecret();
 
@@ -77,37 +127,62 @@ export async function register(req, res, next) {
   try {
     const { name, email, studentId, password } = req.body;
 
-    if (!email || !password || !name || !studentId) {
+    if (!email || !password || !name) {
       return sendError(res, "All fields are required", 400);
     }
 
     const cleanEmail = email.toLowerCase().trim();
+    const adminAccount = getConfiguredAdminAccount();
+    const isAdminRegistration = Boolean(adminAccount && cleanEmail === adminAccount.email);
+    const cleanStudentId = isAdminRegistration ? `ADMIN-${Date.now()}` : studentId?.trim();
+
+    if (!isAdminRegistration && !cleanStudentId) {
+      return sendError(res, "All fields are required", 400);
+    }
+
+    if (isAdminRegistration && password !== adminAccount.password) {
+      return sendError(res, "Invalid admin registration credentials", 403);
+    }
+
     const existingUser = await User.findOne({
       $or: [
         { email: cleanEmail },
-        { studentId: studentId.trim() }
+        { studentId: cleanStudentId }
       ]
     });
 
     if (existingUser) {
+      if (isAdminRegistration && existingUser.email === cleanEmail) {
+        const user = await syncConfiguredAdminUser(existingUser, adminAccount, {
+          updatePassword: true
+        });
+
+        return sendSuccess(res, {
+          message: "Admin account is ready.",
+          user: sanitizeUser(user)
+        });
+      }
+
       return sendError(res, "Email or student ID already exists", 409);
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await User.create({
-      name,
+      name: isAdminRegistration ? adminAccount.name : name,
       email: cleanEmail,
-      studentId: studentId.trim(),
+      studentId: cleanStudentId,
       passwordHash,
-      role: "student",
-      isVerifiedStudent: false,
-      status: "pending"
+      role: isAdminRegistration ? "admin" : "student",
+      isVerifiedStudent: isAdminRegistration,
+      status: isAdminRegistration ? "active" : "pending"
     });
 
     return sendSuccess(
       res,
       {
-        message: "Registration successful. Await admin verification.",
+        message: isAdminRegistration
+          ? "Admin registration successful."
+          : "Registration successful. Await admin verification.",
         user: sanitizeUser(user)
       },
       201
@@ -132,10 +207,19 @@ export async function resolveLoginUser(req, res, next) {
       return sendError(res, "Invalid email or password", 401);
     }
 
+    const adminAccount = getConfiguredAdminAccount();
+    const isConfiguredAdmin = Boolean(adminAccount && cleanEmail === adminAccount.email);
     const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+    const adminPasswordMatches = isConfiguredAdmin && password === adminAccount.password;
 
-    if (!passwordMatches) {
+    if (!passwordMatches && !adminPasswordMatches) {
       return sendError(res, "Invalid email or password", 401);
+    }
+
+    if (isConfiguredAdmin) {
+      await syncConfiguredAdminUser(user, adminAccount, {
+        updatePassword: adminPasswordMatches && !passwordMatches
+      });
     }
 
     if (user.role !== "admin") {

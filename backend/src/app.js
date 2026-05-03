@@ -28,7 +28,11 @@ function validateEnv() {
 }
 
 function normalizeOrigin(value) {
-  return `${value}`.trim().replace(/\/+$/, "");
+  try {
+    return new URL(value).origin;
+  } catch {
+    return `${value}`.trim().replace(/\/+$/, "");
+  }
 }
 
 function isAllowedDevOrigin(origin) {

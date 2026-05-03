@@ -1,0 +1,136 @@
+name: Run full stack
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  full-stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    env:
+      NODE_VERSION: 20
+      BACKEND_PORT: 3001
+      FRONTEND_PORT: 4173
+      VITE_API_URL: http://localhost:3001
+      VITE_BASE_PATH: /
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Validate required backend secrets
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+        run: |
+          missing=0
+
+          if [ -z "$MONGO_URI" ]; then
+            echo "::error::Missing repository secret MONGO_URI for MongoDB Atlas."
+            missing=1
+          fi
+
+          if [ -z "$JWT_SECRET" ]; then
+            echo "::error::Missing repository secret JWT_SECRET for the backend."
+            missing=1
+          fi
+
+          exit "$missing"
+
+      - name: Start backend
+        working-directory: backend
+        env:
+          MONGO_URI: ${{ secrets.MONGO_URI }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          JWT_EXPIRY: ${{ vars.JWT_EXPIRY || '7d' }}
+          CLIENT_URL: http://localhost:4173
+          NODE_ENV: test
+          PORT: ${{ env.BACKEND_PORT }}
+        run: |
+          npm start > ../backend.log 2>&1 &
+          echo $! > ../backend.pid
+
+      - name: Wait for backend health check
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent "http://localhost:${BACKEND_PORT}/api/health" > /dev/null; then
+              exit 0
+            fi
+
+            if ! kill -0 "$(cat backend.pid)" 2>/dev/null; then
+              echo "::error::Backend process exited before becoming healthy."
+              cat backend.log
+              exit 1
+            fi
+
+            sleep 2
+          done
+
+          echo "::error::Backend did not become healthy in time."
+          cat backend.log
+          exit 1
+
+      - name: Start frontend preview
+        working-directory: frontend
+        run: |
+          npm run preview -- --host 127.0.0.1 --port "$FRONTEND_PORT" > ../frontend.log 2>&1 &
+          echo $! > ../frontend.pid
+
+      - name: Wait for frontend preview
+        run: |
+          for attempt in {1..30}; do
+            if curl --fail --silent "http://127.0.0.1:${FRONTEND_PORT}" > /dev/null; then
+              exit 0
+            fi
+
+            if ! kill -0 "$(cat frontend.pid)" 2>/dev/null; then
+              echo "::error::Frontend preview process exited before becoming available."
+              cat frontend.log
+              exit 1
+            fi
+
+            sleep 2
+          done
+
+          echo "::error::Frontend preview did not become available in time."
+          cat frontend.log
+          exit 1
+
+      - name: Print server logs
+        if: always()
+        run: |
+          echo "Backend log:"
+          cat backend.log 2>/dev/null || true
+          echo "Frontend log:"
+          cat frontend.log 2>/dev/null || true

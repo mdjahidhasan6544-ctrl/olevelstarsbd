@@ -51,8 +51,15 @@ async function request(method, path, payload, options = {}) {
 
     if (response.status === 401) {
       const currentPath = window.location.pathname;
+      const currentHash = window.location.hash;
 
-      if (!currentPath.startsWith("/login") && !currentPath.startsWith("/register")) {
+      const isAuthPage = 
+        currentPath.startsWith("/login") || 
+        currentPath.startsWith("/register") ||
+        currentHash.startsWith("#/login") ||
+        currentHash.startsWith("#/register");
+
+      if (!isAuthPage) {
         window.dispatchEvent(new CustomEvent("auth:unauthorized"));
       }
     }
