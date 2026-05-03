@@ -27,6 +27,9 @@ jobs:
     - name: Build
       run: npm run build
       working-directory: frontend
+      env:
+        VITE_BASE_PATH: /olevelstarsbd/
+        VITE_API_URL: https://your-backend-url.com  # Replace with your deployed backend URL
 
     - name: Setup Pages
       uses: actions/configure-pages@v4
