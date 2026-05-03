@@ -1,4 +1,4 @@
-import bcrypt from "bcrypt";
+import { hashPassword, comparePassword } from "../utils/password.js";
 
 import { Course } from "../models/Course.js";
 import { CourseAssignment } from "../models/CourseAssignment.js";
@@ -316,19 +316,19 @@ export async function changePassword(req, res, next) {
       return sendError(res, "User not found", 404);
     }
 
-    const matches = await bcrypt.compare(currentPassword, user.passwordHash);
+    const matches = await comparePassword(currentPassword, user.passwordHash);
 
     if (!matches) {
       return sendError(res, "Current password is incorrect", 400);
     }
 
-    const sameAsCurrent = await bcrypt.compare(newPassword, user.passwordHash);
+    const sameAsCurrent = await comparePassword(newPassword, user.passwordHash);
 
     if (sameAsCurrent) {
       return sendError(res, "New password must be different from the current password", 400);
     }
 
-    user.passwordHash = await bcrypt.hash(newPassword, 12);
+    user.passwordHash = await hashPassword(newPassword);
     await user.save();
 
     return sendSuccess(res, {

@@ -1,4 +1,4 @@
-import bcrypt from "bcrypt";
+import { hashPassword, comparePassword } from "../utils/password.js";
 import jwt from "jsonwebtoken";
 
 import { User } from "../models/User.js";
@@ -83,7 +83,7 @@ async function syncConfiguredAdminUser(user, adminAccount, { updatePassword = fa
   }
 
   if (updatePassword) {
-    user.passwordHash = await bcrypt.hash(adminAccount.password, 12);
+    user.passwordHash = await hashPassword(adminAccount.password);
     updated = true;
   }
 
@@ -166,7 +166,7 @@ export async function register(req, res, next) {
       return sendError(res, "Email or student ID already exists", 409);
     }
 
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await hashPassword(password);
     const user = await User.create({
       name: isAdminRegistration ? adminAccount.name : name,
       email: cleanEmail,
@@ -209,7 +209,7 @@ export async function resolveLoginUser(req, res, next) {
 
     const adminAccount = getConfiguredAdminAccount();
     const isConfiguredAdmin = Boolean(adminAccount && cleanEmail === adminAccount.email);
-    const passwordMatches = await bcrypt.compare(password, user.passwordHash);
+    const passwordMatches = await comparePassword(password, user.passwordHash);
     const adminPasswordMatches = isConfiguredAdmin && password === adminAccount.password;
 
     if (!passwordMatches && !adminPasswordMatches) {

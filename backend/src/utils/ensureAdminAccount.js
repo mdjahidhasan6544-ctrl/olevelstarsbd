@@ -1,4 +1,4 @@
-import bcrypt from "bcrypt";
+import { hashPassword, comparePassword } from "./password.js";
 
 import { User } from "../models/User.js";
 
@@ -14,7 +14,7 @@ export async function ensureAdminAccount() {
   const existingAdmin = await User.findOne({ email });
 
   if (!existingAdmin) {
-    const passwordHash = await bcrypt.hash(password, 12);
+    const passwordHash = await hashPassword(password);
 
     await User.create({
       name,
@@ -30,11 +30,11 @@ export async function ensureAdminAccount() {
     return;
   }
 
-  const passwordMatches = await bcrypt.compare(password, existingAdmin.passwordHash);
+  const passwordMatches = await comparePassword(password, existingAdmin.passwordHash);
   let updated = false;
 
   if (!passwordMatches) {
-    existingAdmin.passwordHash = await bcrypt.hash(password, 12);
+    existingAdmin.passwordHash = await hashPassword(password);
     updated = true;
   }
 
